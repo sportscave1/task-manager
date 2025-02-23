@@ -35,12 +35,12 @@ def get_tasks():
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM tasks 
-            ORDER BY completed, 
+            SELECT * FROM tasks
+            ORDER BY completed,
                      CASE priority 
-                         WHEN 'High' THEN 1 
-                         WHEN 'Medium' THEN 2 
-                         ELSE 3 END, 
+                        WHEN 'High' THEN 1
+                        WHEN 'Medium' THEN 2
+                        ELSE 3 END,
                      due_date
         """)
         return cursor.fetchall()
@@ -77,10 +77,8 @@ def add_task():
                            (task_name, due_date, priority, category))
             conn.commit()
         print("✅ Task added!")
-    except ValueError:
-        print("⚠️ Invalid date format! Use YYYY-MM-DD.")
-    except Exception as e:
-        print(f"⚠️ Error: {e}")
+    except ValueError as e:
+        print(f"⚠️ Invalid input: {e}")
 
 def mark_task_completed():
     view_tasks()
@@ -155,3 +153,4 @@ def main():
 # Run main function
 if __name__ == "__main__":
     main()
+    
