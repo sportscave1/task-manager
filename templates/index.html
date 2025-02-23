@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    
+    <!-- Bootstrap for Styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="manifest" href="/static/manifest.json">
+
+    <style>
+        .priority-high { background-color: #ff4d4d; color: white; }
+        .priority-medium { background-color: #ffcc00; color: black; }
+        .priority-low { background-color: #4caf50; color: white; }
+        .completed { text-decoration: line-through; color: grey; }
+    </style>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/service-worker.js')
+            .then(() => console.log("Service Worker Registered"))
+            .catch(error => console.log("Service Worker Registration Failed", error));
+        }
+    </script>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center">📌 To-Do List 📌</h1>
+        
+        <div class="text-end">
+            <strong>Welcome, {{ current_user.username }}</strong> |
+            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-danger">Logout</a>
+        </div>
+
+        <!-- Table of Tasks -->
+        <table class="table table-striped table-bordered mt-3">
+            <thead class="table-dark">
+                <tr>
+                    <th>Task</th>
+                    <th>Due Date</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="task-list">
+                {% for task in tasks %}
+                <tr data-id="{{ task.id }}">
+                    <td class="task-text {% if task.completed %}completed{% endif %}">{{ task.task }}</td>
+                    <td>{{ task.due_date }}</td>
+                    <td>
+                        <span class="badge {% if task.priority == 'High' %}priority-high{% elif task.priority == 'Medium' %}priority-medium{% else %}priority-low{% endif %}">
+                            {{ task.priority }}
+                        </span>
+                    </td>
+                    <td>
+                        <input type="checkbox" class="mark-done" {% if task.completed %}checked{% endif %}>
+                    </td>
+                    <td>
+                        <button class="btn btn-warning btn-sm edit-task">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm remove-task">❌ Remove</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Task Form -->
+        <form id="task-form" class="mt-4">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" name="task" id="task" class="form-control" placeholder="Enter task" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="date" name="due_date" id="due_date" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <select name="priority" id="priority" class="form-select">
+                        <option value="High">High</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- JavaScript for Task Actions -->
+    <script>
+        $(document).ready(function() {
+            // Add Task
+            $("#task-form").submit(function(event) {
+                event.preventDefault();
+                $.post("/add", $(this).serialize(), function(response) {
+                    location.reload();
+                }).fail(function() {
+                    alert("Error adding task!");
+                });
+            });
+
+            // Remove Task
+            $(".remove-task").click(function(event) {
+                event.preventDefault();
+                var row = $(this).closest("tr");
+                var taskId = row.data("id");
+
+                $.ajax({
+                    url: "/remove/" + taskId,
+                    type: "POST",
+                    success: function(response) {
+                        row.fadeOut(300, function() { $(this).remove(); });
+                    },
+                    error: function() {
+                        alert("Error removing task!");
+                    }
+                });
+            });
+
+            // Mark Task as Completed
+            $(".mark-done").change(function() {
+                var row = $(this).closest("tr");
+                var taskId = row.data("id");
+
+                $.post("/complete/" + taskId, function(response) {
+                    row.find(".task-text").toggleClass("completed");
+                }).fail(function() {
+                    alert("Error updating task!");
+                });
+            });
+
+            // Edit Task
+            $(".edit-task").click(function() {
+                var row = $(this).closest("tr");
+                var taskId = row.data("id");
+                var taskText = row.find(".task-text").text().trim();
+                var newTask = prompt("Edit Task:", taskText);
+                
+                if (newTask) {
+                    $.post("/edit/" + taskId, { task: newTask }, function(response) {
+                        row.find(".task-text").text(newTask).removeClass("completed");
+                    }).fail(function() {
+                        alert("Error editing task!");
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
