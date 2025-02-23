@@ -1,7 +1,9 @@
 import sqlite3
+import os
+import sys
 from datetime import datetime
 
-# Database Setup
+# Database File
 DB_FILE = "tasks.db"
 
 def initialize_db():
@@ -13,7 +15,7 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 task TEXT NOT NULL,
                 due_date TEXT NOT NULL,
-                priority TEXT NOT NULL,
+                priority TEXT NOT NULL CHECK(priority IN ('High', 'Medium', 'Low')),
                 category TEXT NOT NULL,
                 completed INTEGER DEFAULT 0
             )
@@ -29,10 +31,18 @@ def show_menu():
     print("5. Exit")
 
 def get_tasks():
-    """Retrieve tasks from the database."""
+    """Retrieve tasks from the database, sorted by completion, priority, and due date."""
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM tasks ORDER BY completed, due_date, priority")
+        cursor.execute("""
+            SELECT * FROM tasks 
+            ORDER BY completed, 
+                     CASE priority 
+                         WHEN 'High' THEN 1 
+                         WHEN 'Medium' THEN 2 
+                         ELSE 3 END, 
+                     due_date
+        """)
         return cursor.fetchall()
 
 def view_tasks():
@@ -47,17 +57,20 @@ def view_tasks():
         print(f"{i}. {task[1]} (Due: {task[2]}, Priority: {task[3]}, Category: {task[4]}, Status: {status})")
 
 def add_task():
-    task_name = input("\nEnter new task: ")
-    due_date = input("Enter due date (YYYY-MM-DD): ")
-    priority = input("Set priority (High, Medium, Low): ").capitalize()
-    category = input("Set category (Meeting, Order, Follow-up, Urgent, etc.): ").capitalize()
-
-    if priority not in ["High", "Medium", "Low"]:
-        print("⚠️ Invalid priority! Defaulting to Medium.")
-        priority = "Medium"
-
     try:
-        datetime.strptime(due_date, "%Y-%m-%d")  # Validate date format
+        task_name = input("\nEnter new task: ") or "Unnamed Task"
+        due_date = input("Enter due date (YYYY-MM-DD): ")
+        priority = input("Set priority (High, Medium, Low): ").capitalize()
+        category = input("Set category (Meeting, Order, Follow-up, Urgent, etc.): ").capitalize()
+
+        # Validate priority
+        if priority not in ["High", "Medium", "Low"]:
+            print("⚠️ Invalid priority! Defaulting to Medium.")
+            priority = "Medium"
+
+        # Validate date format
+        datetime.strptime(due_date, "%Y-%m-%d")
+
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO tasks (task, due_date, priority, category) VALUES (?, ?, ?, ?)", 
@@ -66,11 +79,17 @@ def add_task():
         print("✅ Task added!")
     except ValueError:
         print("⚠️ Invalid date format! Use YYYY-MM-DD.")
+    except Exception as e:
+        print(f"⚠️ Error: {e}")
 
 def mark_task_completed():
     view_tasks()
     try:
-        task_num = int(input("\nEnter task number to mark as completed: ")) - 1
+        task_num = input("\nEnter task number to mark as completed: ")
+        if not task_num.isdigit():
+            raise ValueError("Invalid input. Enter a number.")
+
+        task_num = int(task_num) - 1
         tasks = get_tasks()
         if 0 <= task_num < len(tasks):
             task_id = tasks[task_num][0]
@@ -81,13 +100,17 @@ def mark_task_completed():
             print(f"✅ Task '{tasks[task_num][1]}' marked as completed.")
         else:
             print("⚠️ Invalid task number.")
-    except ValueError:
-        print("⚠️ Please enter a valid number.")
+    except ValueError as e:
+        print(f"⚠️ {e}")
 
 def remove_task():
     view_tasks()
     try:
-        task_num = int(input("\nEnter task number to remove: ")) - 1
+        task_num = input("\nEnter task number to remove: ")
+        if not task_num.isdigit():
+            raise ValueError("Invalid input. Enter a number.")
+
+        task_num = int(task_num) - 1
         tasks = get_tasks()
         if 0 <= task_num < len(tasks):
             task_id = tasks[task_num][0]
@@ -98,27 +121,37 @@ def remove_task():
             print(f"❌ Task '{tasks[task_num][1]}' removed.")
         else:
             print("⚠️ Invalid task number.")
-    except ValueError:
-        print("⚠️ Please enter a valid number.")
+    except ValueError as e:
+        print(f"⚠️ {e}")
 
-# Initialize database
-initialize_db()
+def main():
+    # Initialize the database
+    initialize_db()
 
-# Main Loop
-while True:
-    show_menu()
-    choice = input("\nChoose an option (1-5): ")
+    # Non-interactive mode fix for Render (if running in an environment without a terminal)
+    if not sys.stdin.isatty():
+        print("\n🚀 Running in non-interactive mode! Exiting.")
+        return
 
-    if choice == "1":
-        view_tasks()
-    elif choice == "2":
-        add_task()
-    elif choice == "3":
-        mark_task_completed()
-    elif choice == "4":
-        remove_task()
-    elif choice == "5":
-        print("\n👋 Goodbye! See you next time.")
-        break
-    else:
-        print("⚠️ Invalid choice! Enter a number between 1-5.")
+    # Main Loop
+    while True:
+        show_menu()
+        choice = input("\nChoose an option (1-5): ").strip()
+
+        if choice == "1":
+            view_tasks()
+        elif choice == "2":
+            add_task()
+        elif choice == "3":
+            mark_task_completed()
+        elif choice == "4":
+            remove_task()
+        elif choice == "5":
+            print("\n👋 Goodbye! See you next time.")
+            break
+        else:
+            print("⚠️ Invalid choice! Enter a number between 1-5.")
+
+# Run main function
+if __name__ == "__main__":
+    main()
