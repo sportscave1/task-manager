@@ -1,72 +1,70 @@
-# Simple To-Do List App
-tasks = []  # Empty list to store tasks
+from flask import Flask, request, jsonify
+import os
 
-def show_menu():
-    print("\n📌 TO-DO LIST 📌")
-    print("1. View tasks")
-    print("2. Add task")
-    print("3. Remove task")
-    print("4. Save tasks to file")
-    print("5. Load tasks from file")
-    print("6. Exit")
-
-def view_tasks():
-    if not tasks:
-        print("\n✅ No tasks found! Add some tasks.")
-    else:
-        print("\n📝 Your Tasks:")
-        for i, task in enumerate(tasks, 1):
-            print(f"{i}. {task}")
-
-def add_task():
-    task = input("\nEnter new task: ")
-    tasks.append(task)
-    print("✅ Task added!")
-
-def remove_task():
-    view_tasks()
-    try:
-        task_num = int(input("\nEnter task number to remove: "))
-        if 1 <= task_num <= len(tasks):
-            removed = tasks.pop(task_num - 1)
-            print(f"❌ Task '{removed}' removed.")
-        else:
-            print("⚠️ Invalid task number.")
-    except ValueError:
-        print("⚠️ Please enter a number.")
-
-def save_tasks():
-    with open("tasks.txt", "w") as file:
-        for task in tasks:
-            file.write(task + "\n")
-    print("💾 Tasks saved to 'tasks.txt'!")
+app = Flask(__name__)
+TASKS_FILE = "tasks.txt"
 
 def load_tasks():
+    """Load tasks from a file."""
+    if not os.path.exists(TASKS_FILE):
+        return []
+    with open(TASKS_FILE, "r") as file:
+        return [line.strip() for line in file.readlines()]
+
+def save_tasks(tasks):
+    """Save tasks to a file."""
+    with open(TASKS_FILE, "w") as file:
+        for task in tasks:
+            file.write(task + "\n")
+
+tasks = load_tasks()
+
+@app.route("/tasks", methods=["GET"])
+def get_tasks():
+    """Retrieve tasks."""
+    return jsonify(tasks)
+
+@app.route("/add_task", methods=["POST"])
+def add_task():
+    """Add a new task."""
+    data = request.json
+    task = data.get("task")
+    if not task:
+        return jsonify({"error": "Task cannot be empty"}), 400
+    tasks.append(task)
+    save_tasks(tasks)
+    return jsonify({"message": "Task added!", "tasks": tasks})
+
+@app.route("/remove_task", methods=["POST"])
+def remove_task():
+    """Remove a task by index."""
+    data = request.json
     try:
-        with open("tasks.txt", "r") as file:
-            global tasks
-            tasks = [line.strip() for line in file.readlines()]
-        print("📂 Tasks loaded from 'tasks.txt'!")
-    except FileNotFoundError:
-        print("⚠️ No saved tasks found.")
+        task_index = int(data.get("task_index")) - 1
+        if 0 <= task_index < len(tasks):
+            removed_task = tasks.pop(task_index)
+            save_tasks(tasks)
+            return jsonify({"message": f"Task '{removed_task}' removed!", "tasks": tasks})
+        return jsonify({"error": "Invalid task number"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid input"}), 400
 
-# Main Loop
-while True:
-    show_menu()
-    choice = input("\nChoose an option (1-6): ")
+@app.route("/save_tasks", methods=["POST"])
+def save_tasks_api():
+    """Save tasks manually."""
+    save_tasks(tasks)
+    return jsonify({"message": "Tasks saved!"})
 
-    if choice == "1":
-        view_tasks()
-    elif choice == "2":
-        add_task()
-    elif choice == "3":
-        remove_task()
-    elif choice == "4":
-        save_tasks()
-    elif choice == "5":
-        load_tasks()
-    elif choice == "6":
-        print("\n👋 Goodbye! See you next time.")
-        break
-    else:
-        print("⚠️ Invalid choice! Enter a number between 1-6.")
+@app.route("/load_tasks", methods=["POST"])
+def load_tasks_api():
+    """Reload tasks from file."""
+    global tasks
+    tasks = load_tasks()
+    return jsonify({"message": "Tasks loaded!", "tasks": tasks})
+
+@app.route("/")
+def home():
+    return "Task Manager API is running!"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)

@@ -1,9 +1,8 @@
+from flask import Flask, request, jsonify
 import sqlite3
-import os
 import sys
-from datetime import datetime
 
-# Database File
+app = Flask(__name__)
 DB_FILE = "tasks.db"
 
 def initialize_db():
@@ -22,141 +21,57 @@ def initialize_db():
         """)
         conn.commit()
 
-def show_menu():
-    print("\n📌 TO-DO LIST 📌")
-    print("1. View tasks (Sorted by Due Date, Priority & Status)")
-    print("2. Add task")
-    print("3. Mark task as completed")
-    print("4. Remove task")
-    print("5. Exit")
+@app.route("/")
+def home():
+    return "Task Manager API is running!"
 
+@app.route("/tasks", methods=["GET"])
 def get_tasks():
-    """Retrieve tasks from the database, sorted by completion, priority, and due date."""
+    """Retrieve tasks from the database."""
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT * FROM tasks
-            ORDER BY completed,
-                     CASE priority 
-                        WHEN 'High' THEN 1
-                        WHEN 'Medium' THEN 2
-                        ELSE 3 END,
-                     due_date
-        """)
-        return cursor.fetchall()
+        cursor.execute("SELECT * FROM tasks ORDER BY completed, priority, due_date")
+        tasks = cursor.fetchall()
+    return jsonify(tasks)
 
-def view_tasks():
-    tasks = get_tasks()
-    if not tasks:
-        print("\n✅ No tasks found! Add some tasks.")
-        return
-
-    print("\n📝 Your Tasks (Sorted by Due Date, Priority & Status):")
-    for i, task in enumerate(tasks, 1):
-        status = "✅ Done" if task[5] else "⏳ Pending"
-        print(f"{i}. {task[1]} (Due: {task[2]}, Priority: {task[3]}, Category: {task[4]}, Status: {status})")
-
-def safe_input(prompt):
-    """Handles EOFError in non-interactive environments."""
-    try:
-        return input(prompt)
-    except EOFError:
-        return ""
-
+@app.route("/add_task", methods=["POST"])
 def add_task():
-    try:
-        task_name = safe_input("\nEnter new task: ") or "Unnamed Task"
-        due_date = safe_input("Enter due date (YYYY-MM-DD): ")
-        priority = safe_input("Set priority (High, Medium, Low): ").capitalize()
-        category = safe_input("Set category (Meeting, Order, Follow-up, Urgent, etc.): ").capitalize()
+    """Add a new task from JSON data."""
+    data = request.json
+    task_name = data.get("task", "Unnamed Task")
+    due_date = data.get("due_date", "2025-12-31")
+    priority = data.get("priority", "Medium")
+    category = data.get("category", "General")
 
-        # Validate priority
-        if priority not in ["High", "Medium", "Low"]:
-            print("⚠️ Invalid priority! Defaulting to Medium.")
-            priority = "Medium"
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO tasks (task, due_date, priority, category) VALUES (?, ?, ?, ?)",
+                       (task_name, due_date, priority, category))
+        conn.commit()
+    return jsonify({"message": "Task added!"}), 201
 
-        # Validate date format
-        datetime.strptime(due_date, "%Y-%m-%d")
-
-        with sqlite3.connect(DB_FILE) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO tasks (task, due_date, priority, category) VALUES (?, ?, ?, ?)", 
-                           (task_name, due_date, priority, category))
-            conn.commit()
-        print("✅ Task added!")
-    except ValueError as e:
-        print(f"⚠️ Invalid input: {e}")
-
+@app.route("/mark_completed", methods=["POST"])
 def mark_task_completed():
-    view_tasks()
-    try:
-        task_num = safe_input("\nEnter task number to mark as completed: ")
-        if not task_num.isdigit():
-            raise ValueError("Invalid input. Enter a number.")
+    """Mark a task as completed."""
+    data = request.json
+    task_id = data.get("task_id")
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (task_id,))
+        conn.commit()
+    return jsonify({"message": "Task marked as completed!"})
 
-        task_num = int(task_num) - 1
-        tasks = get_tasks()
-        if 0 <= task_num < len(tasks):
-            task_id = tasks[task_num][0]
-            with sqlite3.connect(DB_FILE) as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (task_id,))
-                conn.commit()
-            print(f"✅ Task '{tasks[task_num][1]}' marked as completed.")
-        else:
-            print("⚠️ Invalid task number.")
-    except ValueError as e:
-        print(f"⚠️ {e}")
-
+@app.route("/remove_task", methods=["POST"])
 def remove_task():
-    view_tasks()
-    try:
-        task_num = safe_input("\nEnter task number to remove: ")
-        if not task_num.isdigit():
-            raise ValueError("Invalid input. Enter a number.")
+    """Remove a task by ID."""
+    data = request.json
+    task_id = data.get("task_id")
+    with sqlite3.connect(DB_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+    return jsonify({"message": "Task removed!"})
 
-        task_num = int(task_num) - 1
-        tasks = get_tasks()
-        if 0 <= task_num < len(tasks):
-            task_id = tasks[task_num][0]
-            with sqlite3.connect(DB_FILE) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-                conn.commit()
-            print(f"❌ Task '{tasks[task_num][1]}' removed.")
-        else:
-            print("⚠️ Invalid task number.")
-    except ValueError as e:
-        print(f"⚠️ {e}")
-
-def main():
-    # Initialize the database
-    initialize_db()
-
-    # Non-interactive mode fix for Render (avoid EOFError)
-    if not sys.stdin.isatty():
-        print("\n🚀 Running in non-interactive mode! Exiting.")
-        return
-
-    # Main Loop
-    while True:
-        show_menu()
-        choice = safe_input("\nChoose an option (1-5): ").strip()
-
-        if choice == "1":
-            view_tasks()
-        elif choice == "2":
-            add_task()
-        elif choice == "3":
-            mark_task_completed()
-        elif choice == "4":
-            remove_task()
-        elif choice == "5":
-            print("\n👋 Goodbye! See you next time.")
-            break
-        else:
-            print("⚠️ Invalid choice! Enter a number between 1-5.")
-
-# Run main function
 if __name__ == "__main__":
-    main()
+    initialize_db()
+    app.run(host="0.0.0.0", port=10000)

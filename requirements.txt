@@ -2,5 +2,5 @@ Flask
 Flask-Login
 Flask-SQLAlchemy
 Werkzeug
-gunicorn
 requests
+waitress
