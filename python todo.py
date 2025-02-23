@@ -56,12 +56,19 @@ def view_tasks():
         status = "✅ Done" if task[5] else "⏳ Pending"
         print(f"{i}. {task[1]} (Due: {task[2]}, Priority: {task[3]}, Category: {task[4]}, Status: {status})")
 
+def safe_input(prompt):
+    """Handles EOFError in non-interactive environments."""
+    try:
+        return input(prompt)
+    except EOFError:
+        return ""
+
 def add_task():
     try:
-        task_name = input("\nEnter new task: ") or "Unnamed Task"
-        due_date = input("Enter due date (YYYY-MM-DD): ")
-        priority = input("Set priority (High, Medium, Low): ").capitalize()
-        category = input("Set category (Meeting, Order, Follow-up, Urgent, etc.): ").capitalize()
+        task_name = safe_input("\nEnter new task: ") or "Unnamed Task"
+        due_date = safe_input("Enter due date (YYYY-MM-DD): ")
+        priority = safe_input("Set priority (High, Medium, Low): ").capitalize()
+        category = safe_input("Set category (Meeting, Order, Follow-up, Urgent, etc.): ").capitalize()
 
         # Validate priority
         if priority not in ["High", "Medium", "Low"]:
@@ -83,7 +90,7 @@ def add_task():
 def mark_task_completed():
     view_tasks()
     try:
-        task_num = input("\nEnter task number to mark as completed: ")
+        task_num = safe_input("\nEnter task number to mark as completed: ")
         if not task_num.isdigit():
             raise ValueError("Invalid input. Enter a number.")
 
@@ -104,7 +111,7 @@ def mark_task_completed():
 def remove_task():
     view_tasks()
     try:
-        task_num = input("\nEnter task number to remove: ")
+        task_num = safe_input("\nEnter task number to remove: ")
         if not task_num.isdigit():
             raise ValueError("Invalid input. Enter a number.")
 
@@ -126,7 +133,7 @@ def main():
     # Initialize the database
     initialize_db()
 
-    # Non-interactive mode fix for Render (if running in an environment without a terminal)
+    # Non-interactive mode fix for Render (avoid EOFError)
     if not sys.stdin.isatty():
         print("\n🚀 Running in non-interactive mode! Exiting.")
         return
@@ -134,7 +141,7 @@ def main():
     # Main Loop
     while True:
         show_menu()
-        choice = input("\nChoose an option (1-5): ").strip()
+        choice = safe_input("\nChoose an option (1-5): ").strip()
 
         if choice == "1":
             view_tasks()
