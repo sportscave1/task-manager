@@ -5,7 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
 # Initialize Flask App
-app = Flask(__name__)
+app = Flask(__name__, static_url_path="/static")  # Ensure Flask serves static files
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")  # Secure this in production
 
 # Database Config
@@ -28,9 +28,11 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(150), nullable=False)
 
     def set_password(self, password):
+        """ Hashes and stores the user's password """
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        """ Checks if the provided password matches the stored hash """
         return check_password_hash(self.password_hash, password)
 
 class Task(db.Model):
@@ -60,9 +62,8 @@ def home():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    """ Protected user dashboard. """
-    tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return render_template("dashboard.html", tasks=tasks)  # Ensure you have a dashboard.html
+    """ Protected user dashboard - Shows tasks dynamically via JavaScript """
+    return render_template("dashboard.html")  # Ensure dashboard.html exists!
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -109,12 +110,29 @@ def logout():
 # TASK API ROUTES (Protected)
 # ------------------
 
+@app.route("/tasks", methods=["GET"])
+@login_required
+def get_tasks():
+    """ Fetch tasks and return JSON (used by frontend JavaScript) """
+    tasks = Task.query.filter_by(user_id=current_user.id).all()
+    return jsonify([
+        {
+            "id": t.id,
+            "task": t.task,
+            "due_date": t.due_date,
+            "priority": t.priority,
+            "category": t.category,
+            "completed": t.completed
+        } for t in tasks
+    ])
+
 @app.route("/add", methods=["POST"])
 @login_required
 def add_task():
+    """ Add a new task """
     task_text = request.form.get("task")
     due_date = request.form.get("due_date")
-    priority = request.form.get("priority", "Medium")  # Default to Medium priority
+    priority = request.form.get("priority", "Medium")
 
     if not task_text:
         return jsonify({"error": "Task description is required"}), 400
@@ -128,20 +146,17 @@ def add_task():
 @app.route("/edit/<int:task_id>", methods=["POST"])
 @login_required
 def edit_task(task_id):
+    """ Edit an existing task """
     task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
     if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
 
-    new_task_text = request.form.get("task")
-    new_due_date = request.form.get("due_date")
-    new_priority = request.form.get("priority")
+    task_text = request.form.get("task")
+    task.due_date = request.form.get("due_date")
+    task.priority = request.form.get("priority")
 
-    if new_task_text:
-        task.task = new_task_text
-    if new_due_date:
-        task.due_date = new_due_date
-    if new_priority:
-        task.priority = new_priority
+    if task_text:
+        task.task = task_text
 
     db.session.commit()
     return jsonify({"message": "Task updated successfully!"})
@@ -149,6 +164,7 @@ def edit_task(task_id):
 @app.route("/remove/<int:task_id>", methods=["POST"])
 @login_required
 def remove_task(task_id):
+    """ Remove a task """
     task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
     if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
@@ -160,6 +176,7 @@ def remove_task(task_id):
 @app.route("/complete/<int:task_id>", methods=["POST"])
 @login_required
 def complete_task(task_id):
+    """ Toggle task completion status """
     task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
     if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
@@ -169,29 +186,13 @@ def complete_task(task_id):
     return jsonify({"message": "Task status updated!", "completed": task.completed})
 
 # ------------------
-# API FOR MOBILE (Protected)
-# ------------------
-
-@app.route("/api/tasks", methods=["GET"])
-@login_required
-def api_get_tasks():
-    tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return jsonify([{
-        "id": t.id,
-        "task": t.task,
-        "due_date": t.due_date if t.due_date else "No Due Date",
-        "priority": t.priority,
-        "category": t.category if t.category else "None",
-        "completed": t.completed
-    } for t in tasks])
-
-# ------------------
 # INIT DB + RUN
 # ------------------
 
-# Create DB tables if they don't exist
+# Ensure Database is Created
 with app.app_context():
-    db.create_all()
+    if not os.path.exists("tasks.db"):
+        db.create_all()
 
 if __name__ == "__main__":
     app.run(debug=True)
