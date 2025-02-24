@@ -6,11 +6,11 @@ import os
 
 # Initialize Flask App
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'  # In production, set a real secret key (env var, etc.)
+app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")  # Secure this in production
 
 # Database Config
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tasks.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tasks.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
 # Flask-Login Setup
@@ -35,7 +35,7 @@ class User(db.Model, UserMixin):
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     task = db.Column(db.String(200), nullable=False)
     due_date = db.Column(db.String(50))
     priority = db.Column(db.String(20))
@@ -51,31 +51,42 @@ def load_user(user_id):
 # ------------------
 
 @app.route("/")
+def home():
+    """ Public homepage - Shows login/register buttons if user is not logged in. """
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))  # Redirect logged-in users to their dashboard
+    return render_template("index.html")  # Public homepage
+
+@app.route("/dashboard")
 @login_required
 def dashboard():
+    """ Protected user dashboard. """
     tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return render_template("index.html", tasks=tasks)
+    return render_template("dashboard.html", tasks=tasks)  # Ensure you have a dashboard.html
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
+        username = request.form.get("username")
+        password = request.form.get("password")
         user = User.query.filter_by(username=username).first()
+        
         if user and user.check_password(password):
             login_user(user)
             return redirect(url_for("dashboard"))
-        flash("Invalid username or password")
+        
+        flash("Invalid username or password", "danger")
+    
     return render_template("login.html")
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        existing_user = User.query.filter_by(username=username).first()
-        if existing_user:
-            flash("Username already exists. Choose a different one.")
+        username = request.form.get("username")
+        password = request.form.get("password")
+
+        if User.query.filter_by(username=username).first():
+            flash("Username already exists. Choose a different one.", "warning")
             return redirect(url_for("register"))
 
         new_user = User(username=username)
@@ -83,23 +94,27 @@ def register():
         db.session.add(new_user)
         db.session.commit()
 
-        flash("Account created! Please log in.")
+        flash("Account created! Please log in.", "success")
         return redirect(url_for("login"))
+    
     return render_template("register.html")
 
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for("login"))
+    return redirect(url_for("home"))
 
-# Add Task Route
+# ------------------
+# TASK API ROUTES (Protected)
+# ------------------
+
 @app.route("/add", methods=["POST"])
 @login_required
 def add_task():
     task_text = request.form.get("task")
     due_date = request.form.get("due_date")
-    priority = request.form.get("priority")
+    priority = request.form.get("priority", "Medium")  # Default to Medium priority
 
     if not task_text:
         return jsonify({"error": "Task description is required"}), 400
@@ -110,22 +125,19 @@ def add_task():
 
     return jsonify({"message": "Task added successfully!", "id": task.id})
 
-# Edit Task Route
 @app.route("/edit/<int:task_id>", methods=["POST"])
 @login_required
 def edit_task(task_id):
-    task = Task.query.get(task_id)
-    if not task or task.user_id != current_user.id:
+    task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
+    if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
 
-    # If you want to ONLY update the 'task' field:
     new_task_text = request.form.get("task")
-    if new_task_text:
-        task.task = new_task_text
-
-    # If you want to update due_date and priority too (only if provided):
     new_due_date = request.form.get("due_date")
     new_priority = request.form.get("priority")
+
+    if new_task_text:
+        task.task = new_task_text
     if new_due_date:
         task.due_date = new_due_date
     if new_priority:
@@ -134,31 +146,32 @@ def edit_task(task_id):
     db.session.commit()
     return jsonify({"message": "Task updated successfully!"})
 
-# Remove Task Route
 @app.route("/remove/<int:task_id>", methods=["POST"])
 @login_required
 def remove_task(task_id):
-    task = Task.query.get(task_id)
-    if not task or task.user_id != current_user.id:
+    task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
+    if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
 
     db.session.delete(task)
     db.session.commit()
     return jsonify({"message": "Task removed successfully!"})
 
-# Mark Task as Completed
 @app.route("/complete/<int:task_id>", methods=["POST"])
 @login_required
 def complete_task(task_id):
-    task = Task.query.get(task_id)
-    if not task or task.user_id != current_user.id:
+    task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
+    if not task:
         return jsonify({"error": "Task not found or unauthorized"}), 403
 
     task.completed = not task.completed
     db.session.commit()
     return jsonify({"message": "Task status updated!", "completed": task.completed})
 
-# API to Get All Tasks (For Mobile App, optional)
+# ------------------
+# API FOR MOBILE (Protected)
+# ------------------
+
 @app.route("/api/tasks", methods=["GET"])
 @login_required
 def api_get_tasks():
@@ -166,8 +179,9 @@ def api_get_tasks():
     return jsonify([{
         "id": t.id,
         "task": t.task,
-        "due_date": t.due_date,
+        "due_date": t.due_date if t.due_date else "No Due Date",
         "priority": t.priority,
+        "category": t.category if t.category else "None",
         "completed": t.completed
     } for t in tasks])
 
@@ -180,7 +194,4 @@ with app.app_context():
     db.create_all()
 
 if __name__ == "__main__":
-    # For local testing:
-    # app.run(debug=True, host="0.0.0.0", port=5000)
-    # On Render, the gunicorn command will run your app instead.
     app.run(debug=True)
