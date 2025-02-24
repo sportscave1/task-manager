@@ -5,11 +5,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
 # Initialize Flask App
-app = Flask(__name__, static_url_path="/static")  # Ensure Flask serves static files
+app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
+
 app.secret_key = os.getenv("SECRET_KEY", "supersecretkey")  # Secure this in production
 
 # Database Config
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tasks.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///tasks.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
@@ -54,19 +55,21 @@ def load_user(user_id):
 
 @app.route("/")
 def home():
-    """ Public homepage - Shows login/register buttons if user is not logged in. """
+    """ Public homepage - Redirects to dashboard if authenticated """
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))  # Redirect logged-in users to their dashboard
-    return render_template("index.html")  # Public homepage
+        return redirect(url_for("dashboard"))
+    return render_template("index.html")
 
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    """ Protected user dashboard - Shows tasks dynamically via JavaScript """
-    return render_template("dashboard.html")  # Ensure dashboard.html exists!
+    """ Protected user dashboard """
+    tasks = Task.query.filter_by(user_id=current_user.id).all()
+    return render_template("dashboard.html", tasks=tasks)
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """ User Login """
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
@@ -82,6 +85,7 @@ def login():
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    """ User Registration """
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
@@ -103,28 +107,27 @@ def register():
 @app.route("/logout")
 @login_required
 def logout():
+    """ User Logout """
     logout_user()
     return redirect(url_for("home"))
 
 # ------------------
-# TASK API ROUTES (Protected)
+# TASK API ROUTES
 # ------------------
 
 @app.route("/tasks", methods=["GET"])
 @login_required
 def get_tasks():
-    """ Fetch tasks and return JSON (used by frontend JavaScript) """
+    """ Fetch all tasks for the logged-in user """
     tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return jsonify([
-        {
-            "id": t.id,
-            "task": t.task,
-            "due_date": t.due_date,
-            "priority": t.priority,
-            "category": t.category,
-            "completed": t.completed
-        } for t in tasks
-    ])
+    return jsonify([{
+        "id": t.id,
+        "task": t.task,
+        "due_date": t.due_date,
+        "priority": t.priority,
+        "category": t.category,
+        "completed": t.completed
+    } for t in tasks])
 
 @app.route("/add", methods=["POST"])
 @login_required
@@ -195,4 +198,4 @@ with app.app_context():
         db.create_all()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=True)

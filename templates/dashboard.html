@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Welcome to Your Dashboard, {{ current_user.username }}!</h1>
+    
+    <h2>Your Tasks:</h2>
+    <ul id="task-list">
+        {% for task in tasks %}
+            <li>{{ task.task }} - Due: {{ task.due_date }} - Priority: {{ task.priority }}</li>
+        {% endfor %}
+    </ul>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
