@@ -1,21 +1,40 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <h1>Welcome to Your Dashboard, {{ current_user.username }}!</h1>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        function fetchTasks() {
+            fetch("/tasks")
+                .then(response => response.json())
+                .then(data => {
+                    let taskList = document.getElementById("task-list");
+                    taskList.innerHTML = ""; // Clear existing tasks
+                    data.forEach(task => {
+                        let taskItem = document.createElement("li");
+                        taskItem.innerHTML = `
+                            <strong>${task.task}</strong> - Due: ${task.due_date} - Priority: ${task.priority}
+                            <button onclick="markComplete(${task.id}, ${task.completed})">
+                                ${task.completed ? "Undo" : "Complete"}
+                            </button>
+                            <button onclick="removeTask(${task.id})">Remove</button>
+                        `;
+                        taskList.appendChild(taskItem);
+                    });
+                });
+        }
     
-    <h2>Your Tasks:</h2>
-    <ul id="task-list">
-        {% for task in tasks %}
-            <li>{{ task.task }} - Due: {{ task.due_date }} - Priority: {{ task.priority }}</li>
-        {% endfor %}
-    </ul>
-
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
-</html>
+        function markComplete(taskId, isCompleted) {
+            fetch(`/complete/${taskId}`, { method: "POST" })
+                .then(response => response.json())
+                .then(() => fetchTasks());
+        }
+    
+        function removeTask(taskId) {
+            fetch(`/remove/${taskId}`, { method: "POST" })
+                .then(response => response.json())
+                .then(() => fetchTasks());
+        }
+    
+        fetchTasks(); // Load tasks when page loads
+    });
+    </script>
+    
+    <ul id="task-list"></ul>
+    

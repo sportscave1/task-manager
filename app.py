@@ -64,56 +64,7 @@ def home():
 @login_required
 def dashboard():
     """ Protected user dashboard """
-    tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return render_template("dashboard.html", tasks=tasks)
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    """ User Login """
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for("dashboard"))
-        
-        flash("Invalid username or password", "danger")
-    
-    return render_template("login.html")
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    """ User Registration """
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-
-        if User.query.filter_by(username=username).first():
-            flash("Username already exists. Choose a different one.", "warning")
-            return redirect(url_for("register"))
-
-        new_user = User(username=username)
-        new_user.set_password(password)
-        db.session.add(new_user)
-        db.session.commit()
-
-        flash("Account created! Please log in.", "success")
-        return redirect(url_for("login"))
-    
-    return render_template("register.html")
-
-@app.route("/logout")
-@login_required
-def logout():
-    """ User Logout """
-    logout_user()
-    return redirect(url_for("home"))
-
-# ------------------
-# TASK API ROUTES
-# ------------------
+    return render_template("dashboard.html")
 
 @app.route("/tasks", methods=["GET"])
 @login_required
@@ -136,33 +87,16 @@ def add_task():
     task_text = request.form.get("task")
     due_date = request.form.get("due_date")
     priority = request.form.get("priority", "Medium")
+    category = request.form.get("category", "General")
 
     if not task_text:
         return jsonify({"error": "Task description is required"}), 400
 
-    task = Task(user_id=current_user.id, task=task_text, due_date=due_date, priority=priority)
+    task = Task(user_id=current_user.id, task=task_text, due_date=due_date, priority=priority, category=category)
     db.session.add(task)
-    db.session.commit()
+    db.session.commit()  # Ensure commit is executed
 
     return jsonify({"message": "Task added successfully!", "id": task.id})
-
-@app.route("/edit/<int:task_id>", methods=["POST"])
-@login_required
-def edit_task(task_id):
-    """ Edit an existing task """
-    task = Task.query.filter_by(id=task_id, user_id=current_user.id).first()
-    if not task:
-        return jsonify({"error": "Task not found or unauthorized"}), 403
-
-    task_text = request.form.get("task")
-    task.due_date = request.form.get("due_date")
-    task.priority = request.form.get("priority")
-
-    if task_text:
-        task.task = task_text
-
-    db.session.commit()
-    return jsonify({"message": "Task updated successfully!"})
 
 @app.route("/remove/<int:task_id>", methods=["POST"])
 @login_required
