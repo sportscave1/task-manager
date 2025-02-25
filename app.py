@@ -40,9 +40,9 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     task = db.Column(db.String(200), nullable=False)
-    due_date = db.Column(db.String(50))
-    priority = db.Column(db.String(20))
-    category = db.Column(db.String(50))
+    due_date = db.Column(db.String(50), nullable=True)
+    priority = db.Column(db.String(20), default="Medium")
+    category = db.Column(db.String(50), nullable=True)
     completed = db.Column(db.Boolean, default=False)
 
 @login_manager.user_loader
@@ -64,8 +64,7 @@ def home():
 @login_required
 def dashboard():
     """ Protected user dashboard """
-    tasks = Task.query.filter_by(user_id=current_user.id).all()
-    return render_template("dashboard.html", tasks=tasks)
+    return render_template("dashboard.html")  # Tasks now loaded via AJAX instead
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -123,9 +122,9 @@ def get_tasks():
     return jsonify([{
         "id": t.id,
         "task": t.task,
-        "due_date": t.due_date,
+        "due_date": t.due_date or "No due date",
         "priority": t.priority,
-        "category": t.category,
+        "category": t.category or "None",
         "completed": t.completed
     } for t in tasks])
 
@@ -134,17 +133,17 @@ def get_tasks():
 def add_task():
     """ Add a new task """
     task_text = request.form.get("task")
-    due_date = request.form.get("due_date")
+    due_date = request.form.get("due_date", "No due date")
     priority = request.form.get("priority", "Medium")
 
     if not task_text:
         return jsonify({"error": "Task description is required"}), 400
 
-    task = Task(user_id=current_user.id, task=task_text, due_date=due_date, priority=priority)
-    db.session.add(task)
+    new_task = Task(user_id=current_user.id, task=task_text, due_date=due_date, priority=priority)
+    db.session.add(new_task)
     db.session.commit()
 
-    return jsonify({"message": "Task added successfully!", "id": task.id})
+    return jsonify({"message": "Task added successfully!", "id": new_task.id})
 
 @app.route("/edit/<int:task_id>", methods=["POST"])
 @login_required

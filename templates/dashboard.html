@@ -1,40 +1,58 @@
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        function fetchTasks() {
-            fetch("/tasks")
-                .then(response => response.json())
-                .then(data => {
-                    let taskList = document.getElementById("task-list");
-                    taskList.innerHTML = ""; // Clear existing tasks
-                    data.forEach(task => {
-                        let taskItem = document.createElement("li");
-                        taskItem.innerHTML = `
-                            <strong>${task.task}</strong> - Due: ${task.due_date} - Priority: ${task.priority}
-                            <button onclick="markComplete(${task.id}, ${task.completed})">
-                                ${task.completed ? "Undo" : "Complete"}
-                            </button>
-                            <button onclick="removeTask(${task.id})">Remove</button>
-                        `;
-                        taskList.appendChild(taskItem);
-                    });
-                });
-        }
-    
-        function markComplete(taskId, isCompleted) {
-            fetch(`/complete/${taskId}`, { method: "POST" })
-                .then(response => response.json())
-                .then(() => fetchTasks());
-        }
-    
-        function removeTask(taskId) {
-            fetch(`/remove/${taskId}`, { method: "POST" })
-                .then(response => response.json())
-                .then(() => fetchTasks());
-        }
-    
-        fetchTasks(); // Load tasks when page loads
-    });
-    </script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>📌 To-Do List</h1>
     
     <ul id="task-list"></ul>
-    
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            function fetchTasks() {
+                fetch("/tasks")
+                    .then(response => response.json())
+                    .then(data => {
+                        let taskList = document.getElementById("task-list");
+                        taskList.innerHTML = ""; // Clear existing tasks
+
+                        if (data.length === 0) {
+                            taskList.innerHTML = "<p>No tasks found. Add a new task!</p>";
+                        }
+
+                        data.forEach(task => {
+                            let taskItem = document.createElement("li");
+                            taskItem.innerHTML = `
+                                <strong>${task.task}</strong> - Due: ${task.due_date || "No due date"} - Priority: ${task.priority}
+                                <button onclick="markComplete(${task.id}, ${task.completed})">
+                                    ${task.completed ? "Undo" : "Complete"}
+                                </button>
+                                <button onclick="removeTask(${task.id})">Remove</button>
+                            `;
+                            taskList.appendChild(taskItem);
+                        });
+                    })
+                    .catch(error => console.error("Error loading tasks:", error));
+            }
+
+            function markComplete(taskId, isCompleted) {
+                fetch(`/complete/${taskId}`, { method: "POST" })
+                    .then(response => response.json())
+                    .then(() => fetchTasks());
+            }
+
+            function removeTask(taskId) {
+                fetch(`/remove/${taskId}`, { method: "POST" })
+                    .then(response => response.json())
+                    .then(() => fetchTasks());
+            }
+
+            fetchTasks(); // Load tasks when page loads
+        });
+    </script>
+</body>
+</html>
